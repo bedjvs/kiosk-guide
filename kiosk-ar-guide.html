@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>키오스크 도우미</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --blue: #1a6fd4;
+  --blue-dark: #0f4a9c;
+  --yellow: #FFD600;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f97316;
+  --white: #ffffff;
+  --dark: rgba(0,0,0,0.82);
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Noto Sans KR', sans-serif;
+  background: #000;
+}
+
+/* ── CAMERA LAYER ── */
+#cameraLayer {
+  position: fixed; inset: 0;
+  z-index: 0;
+}
+#videoEl {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+#canvasEl {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+/* ── START SCREEN ── */
+#startScreen {
+  position: fixed; inset: 0; z-index: 100;
+  background: linear-gradient(160deg, #0f1f3d 0%, #1a3a6b 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 28px; padding: 40px 28px; text-align: center;
+}
+#startScreen .app-icon {
+  width: 88px; height: 88px; border-radius: 24px;
+  background: var(--blue); display: flex; align-items: center; justify-content: center;
+  font-size: 3rem; box-shadow: 0 8px 32px rgba(26,111,212,0.5);
+}
+#startScreen h1 {
+  color: white; font-size: 1.8rem; font-weight: 900; line-height: 1.3;
+}
+#startScreen p {
+  color: rgba(255,255,255,0.7); font-size: 1rem; line-height: 1.7;
+}
+#startBtn {
+  background: var(--blue); color: white; border: none;
+  border-radius: 16px; padding: 18px 48px;
+  font-size: 1.2rem; font-weight: 900; font-family: inherit;
+  cursor: pointer; box-shadow: 0 6px 24px rgba(26,111,212,0.4);
+  transition: transform 0.15s;
+}
+#startBtn:hover { transform: scale(1.03); }
+
+/* ── UI OVERLAY ── */
+#uiOverlay {
+  position: fixed; inset: 0; z-index: 10;
+  pointer-events: none;
+  display: none;
+}
+
+/* TOP BAR */
+#topBar {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%);
+  pointer-events: auto;
+}
+#topBar .app-name {
+  color: white; font-size: 1rem; font-weight: 900;
+  display: flex; align-items: center; gap: 8px;
+}
+#topBar .app-name .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  animation: blink 2s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+#statusBadge {
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 99px; padding: 5px 12px;
+  color: rgba(255,255,255,0.8); font-size: 0.78rem;
+}
+
+/* AI BUBBLE */
+#aiBubble {
+  position: absolute;
+  top: 70px; left: 16px; right: 16px;
+  background: var(--dark);
+  border-radius: 20px; border-top-left-radius: 6px;
+  padding: 16px 18px;
+  border-left: 4px solid var(--blue);
+  pointer-events: auto;
+  display: none;
+  animation: slideDown 0.3s ease;
+  max-width: 480px;
+}
+@keyframes slideDown {
+  from { opacity:0; transform: translateY(-8px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+#aiBubble .bubble-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+#aiBubble .bubble-avatar {
+  width: 28px; height: 28px; background: var(--blue);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem; flex-shrink: 0;
+}
+#aiBubble .bubble-label {
+  color: var(--blue); font-size: 0.75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+#aiBubble #bubbleText {
+  color: white; font-size: 1rem; line-height: 1.65;
+  word-break: keep-all;
+}
+
+/* POINTER ARROW */
+#aiPointer {
+  position: absolute;
+  pointer-events: none;
+  z-index: 15;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: pointerBounce 1s ease-in-out infinite;
+}
+@keyframes pointerBounce {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+#aiPointer .ptr-finger { font-size: 2.4rem; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6)); }
+#aiPointer .ptr-ring {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 3px solid var(--yellow);
+  box-shadow: 0 0 0 4px rgba(255,214,0,0.3), 0 0 20px rgba(255,214,0,0.5);
+  animation: ringPulse 1s ease-in-out infinite;
+  position: absolute; bottom: -4px;
+}
+@keyframes ringPulse {
+  0%,100% { transform: scale(1); opacity:1; }
+  50%      { transform: scale(1.15); opacity:0.7; }
+}
+
+/* BOTTOM AREA */
+#bottomArea {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+  padding: 16px 16px 28px;
+  pointer-events: auto;
+}
+
+/* QUESTION CHIPS */
+#questionChips {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 14px;
+}
+.q-chip {
+  background: rgba(255,255,255,0.12);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  border-radius: 99px; padding: 8px 16px;
+  color: white; font-size: 0.88rem; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: all 0.15s; backdrop-filter: blur(6px);
+  display: flex; align-items: center; gap: 6px;
+}
+.q-chip:hover { background: var(--blue); border-color: var(--blue); }
+.q-chip .chip-icon { font-size: 1rem; }
+.q-chip.ai-generated {
+  border-color: rgba(255,214,0,0.5);
+  background: rgba(255,214,0,0.1);
+}
+
+/* BOTTOM BUTTONS */
+#bottomBtns {
+  display: flex; gap: 10px; align-items: center;
+}
+#analyzeBtn {
+  flex: 1; background: var(--blue); color: white; border: none;
+  border-radius: 14px; padding: 15px;
+  font-size: 1rem; font-weight: 900; font-family: inherit;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: all 0.15s;
+  box-shadow: 0 4px 16px rgba(26,111,212,0.4);
+}
+#analyzeBtn:hover { background: var(--blue-dark); }
+#analyzeBtn:disabled { background: rgba(255,255,255,0.2); box-shadow: none; }
+#analyzeBtn .btn-spinner {
+  width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white; border-radius: 50%;
+  animation: spin 0.7s linear infinite; display: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#fontBtn {
+  background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.25);
+  color: white; border-radius: 14px; padding: 15px 14px;
+  font-size: 0.9rem; font-weight: 700; font-family: inherit;
+  cursor: pointer; backdrop-filter: blur(6px); white-space: nowrap;
+}
+
+/* AUTO INDICATOR */
+#autoIndicator {
+  position: absolute; bottom: 90px; right: 16px;
+  background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 99px; padding: 6px 12px;
+  color: rgba(255,255,255,0.6); font-size: 0.75rem;
+  display: flex; align-items: center; gap: 6px;
+  pointer-events: none;
+}
+#autoTimer {
+  width: 28px; height: 4px; background: rgba(255,255,255,0.2);
+  border-radius: 2px; overflow: hidden;
+}
+#autoTimerFill {
+  height: 100%; background: var(--green);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+/* TOOLTIP POPUP */
+#tooltip {
+  position: fixed; z-index: 50;
+  background: var(--dark); border-radius: 16px;
+  padding: 16px 18px; max-width: 280px;
+  border: 1px solid rgba(255,255,255,0.15);
+  pointer-events: auto; display: none;
+  animation: fadeUp 0.2s ease;
+}
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+#tooltip .tt-term { color: var(--yellow); font-size: 1rem; font-weight: 900; margin-bottom: 6px; }
+#tooltip .tt-desc { color: rgba(255,255,255,0.85); font-size: 0.9rem; line-height: 1.6; }
+#tooltip .tt-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: rgba(255,255,255,0.5);
+  font-size: 1.1rem; cursor: pointer;
+}
+
+/* NO CAMERA fallback */
+#noCamMsg {
+  position: fixed; inset: 0; z-index: 5;
+  background: #111; display: none;
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px; text-align: center; padding: 32px;
+}
+#noCamMsg p { color: rgba(255,255,255,0.6); font-size: 1rem; line-height: 1.7; }
+
+/* LOADING SHIMMER on bubble */
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+  border-radius: 8px; height: 1em; margin: 4px 0;
+}
+@keyframes shimmer { 0%{background-position:200%} 100%{background-position:-200%} }
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="startScreen">
+  <div class="app-icon">📷</div>
+  <h1>키오스크<br>도우미</h1>
+  <p>카메라로 키오스크 화면을 비추면<br>AI가 실시간으로 안내해드려요 😊<br><br>천천히 하셔도 괜찮아요!</p>
+  <button id="startBtn" onclick="startCamera()">📷 카메라 켜기</button>
+</div>
+
+<!-- CAMERA -->
+<div id="cameraLayer">
+  <video id="videoEl" autoplay playsinline muted></video>
+  <canvas id="canvasEl"></canvas>
+</div>
+
+<!-- NO CAM -->
+<div id="noCamMsg">
+  <p style="font-size:2rem">📷</p>
+  <p>카메라를 사용할 수 없어요.<br>브라우저에서 카메라 권한을 허용해 주세요.</p>
+</div>
+
+<!-- POINTER -->
+<div id="aiPointer">
+  <div class="ptr-finger">👆</div>
+  <div class="ptr-ring"></div>
+</div>
+
+<!-- UI OVERLAY -->
+<div id="uiOverlay">
+
+  <!-- TOP -->
+  <div id="topBar">
+    <div class="app-name">
+      <div class="dot"></div>
+      키오스크 도우미
+    </div>
+    <div id="statusBadge">분석 준비중...</div>
+  </div>
+
+  <!-- AI BUBBLE -->
+  <div id="aiBubble">
+    <div class="bubble-header">
+      <div class="bubble-avatar">🤖</div>
+      <span class="bubble-label">AI 안내</span>
+    </div>
+    <div id="bubbleText"></div>
+  </div>
+
+  <!-- AUTO TIMER -->
+  <div id="autoIndicator">
+    <span>자동 분석</span>
+    <div id="autoTimer"><div id="autoTimerFill" style="width:100%"></div></div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div id="bottomArea">
+    <div id="questionChips"></div>
+    <div id="bottomBtns">
+      <button id="analyzeBtn" onclick="analyzeNow()">
+        <div class="btn-spinner" id="btnSpinner"></div>
+        <span id="btnText">🔍 지금 분석하기</span>
+      </button>
+      <button id="fontBtn" onclick="toggleFont()">가<br>크게</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip">
+  <button class="tt-close" onclick="closeTooltip()">✕</button>
+  <div class="tt-term" id="ttTerm"></div>
+  <div class="tt-desc" id="ttDesc"></div>
+</div>
+
+<script>
+// ── CONSTANTS ──
+const KNOWN_TERMS = {
+  '멤버십': '포인트를 쌓거나 할인받을 수 있는 회원 카드예요.\n없으시면 "없음" 또는 "건너뛰기"를 누르시면 돼요! 😊',
+  '포인트': '구매할 때마다 쌓이는 점수예요. 나중에 할인에 쓸 수 있어요.\n없으시면 그냥 다음으로 넘어가시면 돼요!',
+  '통신사 할인': 'KT, SKT, LG 같은 핸드폰 회사에서 제공하는 할인이에요.\n해당 없으시면 "해당없음"이나 "건너뛰기"를 누르세요!',
+  '쿠폰': '할인해주는 종이나 앱의 코드예요.\n없으시면 "없음"을 누르고 그냥 넘어가시면 돼요!',
+  'For Here': '매장 안에서 먹는다는 뜻이에요 🪑',
+  'To Go': '포장해서 가져간다는 뜻이에요 🛍️',
+  'IC칩': '카드 앞면에 있는 금색 네모 부분이에요.\n그 부분이 안쪽으로 향하게 넣으시면 돼요!',
+  'NFC': '카드나 폰을 가져다 대면 결제되는 방식이에요.\n단말기에 살짝 대시면 돼요!',
+  'QR코드': '핸드폰 카메라로 찍는 네모난 바코드예요.',
+  '세트': '버거 + 감자튀김 + 음료를 같이 파는 묶음 메뉴예요. 단품보다 보통 저렴해요!',
+  '단품': '음식 하나만 주문하는 거예요.',
+  '영수증': '얼마를 냈는지 적힌 종이예요. 받으시겠냐고 물으면 원하시면 "예", 아니면 "아니요"를 누르세요!',
+};
+
+const FIXED_CHIPS = [
+  { icon: '❓', label: '멤버십이 뭔가요?', term: '멤버십' },
+  { icon: '❓', label: '통신사 할인?', term: '통신사 할인' },
+  { icon: '❓', label: '포인트가 뭔가요?', term: '포인트' },
+  { icon: '❓', label: '쿠폰이 없어요', term: '쿠폰' },
+  { icon: '❓', label: '카드 넣는 방법', term: 'IC칩' },
+];
+
+// ── STATE ──
+let stream = null;
+let isAnalyzing = false;
+let autoInterval = null;
+let timerInterval = null;
+let autoSeconds = 4;
+let timerLeft = autoSeconds;
+let largeFontMode = false;
+let lastAnalysis = null;
+
+// ── CAMERA START ──
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    const video = document.getElementById('videoEl');
+    video.srcObject = stream;
+    await video.play();
+
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('uiOverlay').style.display = 'block';
+
+    initChips();
+    startAutoAnalysis();
+    showBubble('📷 카메라가 켜졌어요!\n\n키오스크 화면을 비춰주시면\nAI가 무엇을 눌러야 하는지 알려드릴게요 😊\n\n천천히 하셔도 괜찮아요!', false);
+
+  } catch(e) {
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('noCamMsg').style.display = 'flex';
+  }
+}
+
+// ── CAPTURE FRAME ──
+function captureFrame() {
+  const video = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+}
+
+// ── ANALYZE ──
+async function analyzeNow() {
+  if (isAnalyzing) return;
+  resetAutoTimer();
+  await doAnalysis();
+}
+
+async function doAnalysis() {
+  if (isAnalyzing) return;
+  isAnalyzing = true;
+  setAnalyzingUI(true);
+
+  let imageB64;
+  try { imageB64 = captureFrame(); }
+  catch(e) { setAnalyzingUI(false); isAnalyzing = false; return; }
+
+  const prompt = `당신은 어르신을 위한 키오스크 도우미입니다.
+이 화면을 보고 다음을 알려주세요:
+
+1. ACTION: 지금 눌러야 할 버튼이나 해야 할 행동을 한 문장으로 (예: "빨간 '주문하기' 버튼을 누르세요")
+2. EXPLAIN: 위 행동을 쉽게 2~3문장으로 설명 (쉬운 말, 존댓말, 따뜻하게)
+3. POINTER: 눌러야 할 버튼의 위치를 화면 비율로 (x: 0~1, y: 0~1). 버튼이 없으면 null
+4. UNKNOWN_TERMS: 화면에 어르신이 모를 것 같은 단어들 최대 3개 (배열)
+5. CHEER: 짧은 응원 한마디
+
+JSON 형식으로만 답하세요:
+{"action":"...","explain":"...","pointer":{"x":0.5,"y":0.5},"unknown_terms":["단어1"],"cheer":"..."}
+
+화면이 키오스크가 아니거나 잘 안 보이면:
+{"action":"잘 안 보여요","explain":"카메라를 키오스크 화면에 가까이 대주세요 😊","pointer":null,"unknown_terms":[],"cheer":"천천히 해도 괜찮아요!"}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 600,
+        messages: [{
+          role: 'user',
+          content: [{
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/jpeg', data: imageB64 }
+          }, {
+            type: 'text',
+            text: prompt
+          }]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '';
+    let parsed;
+    try {
+      const clean = raw.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      parsed = { action: '분석 중 오류', explain: '다시 시도해 주세요 😊', pointer: null, unknown_terms: [], cheer: '괜찮아요!' };
+    }
+
+    lastAnalysis = parsed;
+    renderAnalysis(parsed);
+
+  } catch(e) {
+    showBubble('연결이 잠깐 끊겼어요.\n잠시 후 다시 시도해 주세요 😊', false);
+  }
+
+  isAnalyzing = false;
+  setAnalyzingUI(false);
+}
+
+// ── RENDER RESULT ──
+function renderAnalysis(data) {
+  // Bubble
+  const text = `👆 ${data.action}\n\n${data.explain}\n\n✨ ${data.cheer}`;
+  showBubble(text, false);
+
+  // Pointer
+  if (data.pointer) {
+    showPointer(data.pointer.x, data.pointer.y);
+  } else {
+    hidePointer();
+  }
+
+  // Status
+  document.getElementById('statusBadge').textContent = '✅ 분석 완료';
+
+  // Chips: fixed + AI-detected unknowns
+  renderChips(data.unknown_terms || []);
+}
+
+// ── BUBBLE ──
+function showBubble(text, loading) {
+  const bubble = document.getElementById('aiBubble');
+  const el = document.getElementById('bubbleText');
+  bubble.style.display = 'block';
+  if (loading) {
+    el.innerHTML = '<div class="shimmer" style="width:80%"></div><div class="shimmer" style="width:60%"></div>';
+  } else {
+    el.textContent = text;
+  }
+}
+
+// ── POINTER ──
+function showPointer(rx, ry) {
+  const ptr = document.getElementById('aiPointer');
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  // px from top-left, offset so finger tip points at target
+  const x = Math.round(W * rx) - 20;
+  const y = Math.round(H * ry) - 60;
+  ptr.style.display = 'flex';
+  ptr.style.position = 'fixed';
+  ptr.style.left = Math.max(8, Math.min(W-60, x)) + 'px';
+  ptr.style.top  = Math.max(8, Math.min(H-80, y)) + 'px';
+  ptr.style.zIndex = 20;
+}
+
+function hidePointer() {
+  document.getElementById('aiPointer').style.display = 'none';
+}
+
+// ── CHIPS ──
+function initChips() { renderChips([]); }
+
+function renderChips(aiTerms) {
+  const container = document.getElementById('questionChips');
+  container.innerHTML = '';
+
+  // Fixed chips
+  FIXED_CHIPS.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'q-chip';
+    btn.innerHTML = `<span class="chip-icon">${c.icon}</span>${c.label}`;
+    btn.onclick = () => showTermTooltip(c.term);
+    container.appendChild(btn);
+  });
+
+  // AI-detected unknowns
+  aiTerms.forEach(term => {
+    if (KNOWN_TERMS[term]) return; // already in fixed
+    const btn = document.createElement('button');
+    btn.className = 'q-chip ai-generated';
+    btn.innerHTML = `<span class="chip-icon">❓</span>${term}`;
+    btn.onclick = () => askAIAboutTerm(term);
+    container.appendChild(btn);
+  });
+}
+
+// ── TOOLTIP ──
+function showTermTooltip(term) {
+  const desc = KNOWN_TERMS[term];
+  if (!desc) { askAIAboutTerm(term); return; }
+  document.getElementById('ttTerm').textContent = '❓ ' + term;
+  document.getElementById('ttDesc').textContent = desc;
+  const tt = document.getElementById('tooltip');
+  tt.style.display = 'block';
+  // center
+  tt.style.left = '50%';
+  tt.style.top = '50%';
+  tt.style.transform = 'translate(-50%, -50%)';
+}
+
+function closeTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+async function askAIAboutTerm(term) {
+  closeTooltip();
+  showBubble('', true);
+  hidePointer();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        messages: [{
+          role: 'user',
+          content: `어르신에게 키오스크에서 나오는 단어 "${term}"를 설명해주세요. 쉬운 말로 2~3문장, 존댓말, 따뜻하게. 이모지 포함.`
+        }]
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || '설명을 가져오지 못했어요.';
+    document.getElementById('ttTerm').textContent = '❓ ' + term;
+    document.getElementById('ttDesc').textContent = reply;
+    const tt = document.getElementById('tooltip');
+    tt.style.display = 'block';
+    tt.style.left = '50%'; tt.style.top = '50%';
+    tt.style.transform = 'translate(-50%, -50%)';
+    document.getElementById('aiBubble').style.display = 'none';
+  } catch(e) {
+    showBubble('설명을 가져오지 못했어요. 다시 눌러보세요 😊', false);
+  }
+}
+
+// ── AUTO ANALYSIS ──
+function startAutoAnalysis() {
+  timerLeft = autoSeconds;
+  updateTimerBar();
+
+  timerInterval = setInterval(() => {
+    timerLeft -= 0.1;
+    if (timerLeft <= 0) {
+      timerLeft = autoSeconds;
+      if (!isAnalyzing) doAnalysis();
+    }
+    updateTimerBar();
+  }, 100);
+}
+
+function resetAutoTimer() {
+  timerLeft = autoSeconds;
+  updateTimerBar();
+}
+
+function updateTimerBar() {
+  const pct = (timerLeft / autoSeconds) * 100;
+  document.getElementById('autoTimerFill').style.width = pct + '%';
+}
+
+// ── UI STATES ──
+function setAnalyzingUI(on) {
+  const btn = document.getElementById('analyzeBtn');
+  const spinner = document.getElementById('btnSpinner');
+  const txt = document.getElementById('btnText');
+  const badge = document.getElementById('statusBadge');
+
+  if (on) {
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    txt.textContent = '분석중...';
+    badge.textContent = '🔍 분석중...';
+    showBubble('', true);
+  } else {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    txt.textContent = '🔍 지금 분석하기';
+  }
+}
+
+// ── FONT TOGGLE ──
+function toggleFont() {
+  largeFontMode = !largeFontMode;
+  document.documentElement.style.fontSize = largeFontMode ? '20px' : '16px';
+  document.getElementById('fontBtn').textContent = largeFontMode ? '가\n작게' : '가\n크게';
+}
+</script>
+</body>
+</html>
